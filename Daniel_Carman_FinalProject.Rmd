@@ -1,0 +1,390 @@
+---
+title: "Final Project"
+---
+
+
+**Daniel Carman**:
+**G00828836**:
+
+
+
+```{r warning = FALSE, message = FALSE}
+# Suppress dplyr summarize grouping warning messages
+options(dplyr.summarise.inform = FALSE)
+
+## Add R libraries here
+library(tidyverse)
+library(tidymodels)
+
+
+# Load data
+loans_df <- read_rds(url('https://gmudatamining.com/data/loan_data.rds'))
+
+```
+
+
+
+# Data Analysis [50 Points]
+
+In this section, you must think of at least 5 relevant questions that explore the relationship between `loan_default` and the other variables in the `loan_df` data set. The goal of your analysis should be discovering which variables drive the differences between customers who do and do not default on their loans.
+
+You must answer each question and provide supporting data summaries with either a summary data frame (using `dplyr`/`tidyr`) or a plot (using `ggplot`) or both.
+
+In total, you must have a minimum of 3 plots (created with `ggplot`) and 3 summary data frames (created with `dplyr`) for the exploratory data analysis section. Among the plots you produce, you must have at least 3 different types (ex. box plot, bar chart, histogram, scatter plot, etc...)
+
+See the example question below.
+
+
+**Note**: To add an R code chunk to any section of your project, you can use the keyboard shortcut `Ctrl` + `Alt` + `i` or the `insert` button at the top of your R project template notebook file.
+
+
+## Sample Question
+
+**Are there differences in loan default rates by loan purpose?**
+
+**Answer**: Yes, the data indicates that credit card and medical loans have significantly larger default rates than any other type of loan. In fact, both of these loan types have default rates at more than 50%. This is nearly two times the average default rate for all other loan types.
+
+
+### Summary Table
+
+```{r echo = TRUE, fig.height=5, fig.width=9}
+loans_df %>%
+  group_by(loan_purpose) %>% 
+  summarise(n_customers = n(),
+            customers_default = sum(loan_default == 'yes'),
+            default_percent = 100 * mean(loan_default == 'yes'))
+```
+
+
+### Data Visulatization
+
+```{r echo = TRUE, fig.height=5, fig.width=9}
+default_rates <- loans_df %>%
+                 group_by(loan_purpose) %>% 
+                 summarise(n_customers = n(),
+                 customers_default = sum(loan_default == 'yes'),
+                 default_percent = 100 * mean(loan_default == 'yes'))
+
+
+ggplot(data = default_rates, mapping = aes(x = loan_purpose, y = default_percent)) +
+    geom_bar(stat = 'identity', fill = '#006EA1', color = 'white') +
+    labs(title = 'Loan Default Rate by Purpose of Loan',
+         x = 'Loan Purpose',
+         y = 'Default Percentage') +
+    theme_light()
+```
+
+
+
+# Question 1
+
+
+**Question**:
+
+Are customers with larger loans more likely to default on that loan?
+
+**Answer**:
+
+The data suggests that there is no significant correlation between loan amount and loan default rate. In fact, loans at the 10000, 20000, and 30000 are relatively similar in proportion to total defaulted loans.
+
+### Data Visulatization
+
+```{r}
+ggplot(data = loans_df, mapping = aes(x = loan_amount, fill = loan_default)) +
+       geom_histogram(fill = "#006EA1", color = "white") + 
+       facet_wrap( ~ loan_default, nrow = 1)
+```
+
+
+# Question 2
+
+
+**Question**:
+
+Does lower income bracket correlate with a high default rate?
+
+**Answer**:
+
+There appears to be no evidence indicating that lower income brackets have a higher loan default rate.
+
+```{r}
+loans_df %>% group_by(loan_default) %>% 
+  summarize(n_loanss = n(), 
+            avg_income = mean(annual_income)) 
+```
+
+### Data Visulatization
+
+```{r}
+ggplot(data = loans_df, mapping = aes(x = loan_default, y = annual_income)) +
+  geom_boxplot(fill = "#006EA1")
+
+```
+
+
+# Question 3
+
+
+**Question**:
+
+Is there a connection between loan purpose and loan defaults?
+
+**Answer**:
+
+Based on the data, credit card and medical loans cover a significant majority of defaulted loans. Conversely, debt consolidations and small business loans are far less likely to be defaulted on, based on the makeup of the non-defaulted loans.
+
+```{r}
+loans_df %>% group_by(loan_purpose, loan_default) %>%
+  summarize(n_loans = n())
+
+```
+
+### Data Visulatization
+
+```{r}
+ggplot(data = loans_df, mapping = aes(x = loan_default, fill = loan_purpose)) +
+       geom_bar(stat = "count", position = "fill")
+
+```
+
+
+# Question 4
+
+
+**Question**:
+
+Are individual, or joint applications more likely to be defaulted on?
+
+**Answer**:
+While individual applications have a higher count of defaulted loans, this does not necessarily translate to a higher likelihood, due to the higher amount of individual loans overall. 
+
+### Data Visulatization
+
+```{r}
+ggplot(data = loans_df, aes(x = application_type, fill = loan_default)) +
+    geom_bar(stat = "count") +
+    labs(title = "Loan Default Status by Application Type",
+         x = "Application Type", y = "Number of Loans")
+
+```
+
+
+
+# Question 5
+
+
+**Question**:
+
+Is there a correlation between a high amount of credit lines and loan defaults?
+
+**Answer**:
+
+There appears to be a large amount of defaulted loans with 10-30 credit lines, making up more than half of all defaulted loans. However, there is not quite enough evidence here to be certain it is a factor.
+
+```{r}
+
+loans_df %>% 
+  mutate(credit_category = cut_width(total_credit_lines, width = 10, boundary = 0)) %>%
+  group_by(loan_default, credit_category) %>%
+  summarise(n_loans = n())
+
+```
+
+
+
+
+# Predictive Modeling [75 Points]
+
+
+In this section of the project, you will fit **two classification algorithms** to predict the response variable,`loan_default`. You should use all of the other variables in the `loans_df` data as predictor variables for each model.
+
+You must follow the machine learning steps below. 
+
+The data splitting and feature engineering steps should only be done once so that your models are using the same data and feature engineering steps for training.
+
+- Split the `loans_df` data into a training and test set (remember to set your seed)
+- Specify a feature engineering pipeline with the `recipes` package
+    - You can include steps such as skewness transformation, dummy variable encoding or any other steps you find appropriate
+- Specify a `parsnip` model object
+    - You may choose from the following classification algorithms:
+      - Logistic Regression
+      - LDA
+      - QDA
+      - KNN
+      - Decision Tree
+      - Random Forest
+- Package your recipe and model into a workflow
+- Fit your workflow to the training data
+    - If your model has hyperparameters:
+      - Split the training data into 5 folds for 5-fold cross validation using `vfold_cv` (remember to set your seed)
+      - Perform hyperparamter tuning with a random grid search using the `grid_random()` function 
+      - Hyperparameter tuning can take a significant amount of computing time. Be careful not to set the `size` argument of `grid_random()` too large. I recommend `size` = 10 or smaller.
+      - Select the best model with `select_best()` and finalize your workflow
+- Evaluate model performance on the test set by plotting an ROC curve using `autoplot()` and calculating the area under the ROC curve on your test data
+
+
+
+
+
+# Model 1 KNN
+
+```{r}
+set.seed(271)
+
+loan_split <- initial_split(loans_df , prop = 0.75,
+                              strata = loan_default )
+
+loan_training <- loan_split %>% training()
+
+loan_test <- loan_split %>% testing()
+
+# Create cross validation folds for hyperparameter tuning
+set.seed(271)
+
+loan_folds <- vfold_cv(loan_training, v = 5)
+
+loan_recipe <- recipe(loan_default ~ ., data = loan_training) %>% 
+                 step_YeoJohnson(all_numeric(), -all_outcomes()) %>% 
+                       step_normalize(all_numeric(), -all_outcomes()) %>% 
+                       step_dummy(all_nominal(), -all_outcomes())
+
+knn_model <- nearest_neighbor(neighbors = tune()) %>% 
+             set_engine('kknn') %>% 
+             set_mode('classification')
+
+knn_wf <- workflow() %>% 
+          add_model(knn_model) %>% 
+          add_recipe(loan_recipe)
+
+k_grid <- tibble(neighbors = c(10, 15, 25, 45, 60, 80, 100, 120, 140, 180))
+
+set.seed(314)
+
+knn_tuning <- knn_wf %>% 
+              tune_grid(resamples = loan_folds,
+                         grid = k_grid)
+
+best_k <- knn_tuning %>% 
+          select_best(metric = 'roc_auc')
+
+final_knn_wf <- knn_wf %>% 
+                finalize_workflow(best_k)
+
+knn_fit <- final_knn_wf %>% 
+                last_fit(split = loan_split)
+
+knn_results <-   knn_fit %>% 
+                 collect_predictions()
+
+```
+
+
+
+
+
+
+# Model 2 LNN
+
+```{r}
+set.seed(271)
+
+loan_split <- initial_split(loans_df , prop = 0.75,
+                              strata = loan_default )
+
+loan_training <- loan_split %>% training()
+
+loan_test <- loan_split %>% testing()
+
+# Create cross validation folds for hyperparameter tuning
+set.seed(271)
+
+loan_folds <- vfold_cv(loan_training, v = 5)
+
+loan_recipe <- recipe(loan_default ~ ., data = loan_training) %>% 
+                 step_YeoJohnson(all_numeric(), -all_outcomes()) %>% 
+                       step_normalize(all_numeric(), -all_outcomes()) %>% 
+                       step_dummy(all_nominal(), -all_outcomes())
+
+lda_model <- discrim_regularized(frac_common_cov = 1) %>% 
+             set_engine('klaR') %>% 
+             set_mode('classification')
+
+lda_wf <- workflow() %>% 
+          add_model(lda_model) %>% 
+          add_recipe(loan_recipe)
+
+lda_fit <-  lda_wf %>% 
+                last_fit(split = loan_split)
+
+l_grid <- tibble(neighbors = c(10, 15, 25, 45, 60, 80, 100, 120, 140, 180))
+
+set.seed(314)
+
+lda_tuning <- lda_wf %>% 
+              tune_grid(resamples = loan_folds,
+                         grid = l_grid)
+
+best_l <- lda_tuning %>% 
+          select_best(metric = 'roc_auc')
+
+final_lda_wf <- lda_wf %>% 
+                finalize_workflow(best_l)
+
+lda_fit <- final_lda_wf %>% 
+                last_fit(split = loan_split)
+
+lda_results <-   lda_fit %>% 
+                 collect_predictions()
+
+```
+
+
+
+
+
+# Summary of Results [25 Points]
+
+Write a summary of your overall findings and recommendations to the executives at the bank. Think of this section as your closing remarks of a presentation, where you summarize your key findings, model performance, and make recommendations to improve loan processes at the bank.
+
+Your executive summary must be written in a [professional tone](https://www.universalclass.com/articles/writing/business-writing/appropriate-tone-in-business-communications.htm), with minimal grammatical errors, and should include the following sections:
+
+1. An introduction where you explain the business problem and goals of your data analysis
+
+    - What problem(s) is this company trying to solve? Why are they important to their future success?
+  
+    - What was the goal of your analysis? What questions were you trying to answer and why do they matter?
+
+
+2. Highlights and key findings from your Exploratory Data Analysis section 
+    - What were the interesting findings from your analysis and **why are they important for the business**?
+
+    - This section is meant to **establish the need for your recommendations** in the following section
+
+
+3. Your recommendations to the company on how to reduce loan default rates 
+  
+    - Each recommendation must be supported by your data analysis results 
+
+    - You must clearly explain why you are making each recommendation and which results from your data analysis support this recommendation
+
+    - You must also describe the potential business impact of your recommendation:
+      
+      - Why is this a good recommendation? 
+      
+      - What benefits will the business achieve?
+
+
+
+
+**Summary**
+
+Add your summary here. Please do not place your text within R code chunks.
+
+1. To summarize our findings, we are using data gathered from our customers to determine key factors regarding a customer's likelihood of defaulting on their loan including loan amount, income bracket, purpose of the loan, application type, and credit lines, among other factors. In doing so, we aim to understand which factors in our loans contribute most to a default, as well as clearing up possible misconceptions we may have about our clients and their reliability in paying our loans. 
+
+2. Speaking of clearing up misconceptions, our first significant finding reveals that there is no significant correlation between loan amount and default rates. Even loans at upwards of 40000 do not hold a higher default rate compared to loans valued at 5000 or less. These findings can also be applied to income bracket, as loans that are defaulted or not defaulted both find the highest density around the 50-100-thousand-dollar income bracket. However, this may be due to a simply high count around that bracket, or a low count of higher incomes in the data. More research into this factor is a possible area to improve. We can come to a similar conclusion regarding application type. A high count of individual defaults does not necessarily indicate that individual loans are more likely to be defaulted on. Rather, it is simply indicative of a large amount of individual loans being recorded. Again, this principle can be connected to the amount of credit lines and loan default rate. While there is a significant amount of defaulted loans at credit lines in the 10-30 range, there is also a significant amount of non-defaulted loans at the same bracket. Proportionally, this does not indicate a significant correlation, and we recommend further research using multiple factors to investigate.
+
+Our first and only major factor in higher loan default rates stems from the purpose of the loan being taken. Medical and credit card loans are more frequently defaulted on by a higher margin than other loans. Further investigation into why this is the case is also recommended. Conversely, debt consolidations and small business loans are far less likely to be defaulted on, based on the makeup of the non-defaulted loan data. 
+
+3. Our recommendations are to investigate the non-correlated factors further, adding in a third factor to narrow down possible connections. For example, loan amounts do not seem to factor in by themselves, but what if we investigated that factor with another? Do high loans with low-income brackets have a higher default rate? Following this approach, we also need to narrow down why medical and credit card loans are highly defaulted on. Combining what we already know about these loans with other factors in the data allows us to reveal even more factors in why our loans are being defaulted on.
+
